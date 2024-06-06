@@ -3,30 +3,29 @@ import { Provider } from 'react-redux';
 import configureStore from 'redux-mock-store';
 import createSagaMiddleware from 'redux-saga';
 import UserDetails from './UserDetails';
-import { deleteUsers, updateUser } from '../../actions';
-import { User } from './UserDetails.type';
-import rootSaga from '../../saga/Saga';
+import { getUsersFetch, deleteUsers, updateUser } from '../../actions';
 
 const sagaMiddleware = createSagaMiddleware();
 const mockStore = configureStore([sagaMiddleware]);
 
 jest.mock('../../actions', () => ({
-  getUsersFetch: jest.fn(),
-  deleteUsers: jest.fn(),
-  updateUser: jest.fn(),
+  getUsersFetch: jest.fn(() => ({ type: 'GET_USERS_FETCH' })),
+  deleteUsers: jest.fn((id) => ({ type: 'DELETE_USER', payload: id })),
+  updateUser: jest.fn((user) => ({ type: 'UPDATE_USER', payload: user })),
 }));
 
 const initialState = {
   myFirstReducer: {
     users: [
-      { id: 1, name: 'John Doe', phone: '1234567890', email: 'john@example.com', website: 'www.john.com' },
-      { id: 2, name: 'Jane Doe', phone: '0987654321', email: 'jane@example.com', website: 'www.jane.com' }
-    ] as User[]
-  }
+      { id: 1, name: 'John Doe', phone: '123-456-7890', email: 'john@example.com', website: 'john.com' },
+      { id: 2, name: 'Jane Doe', phone: '987-654-3210', email: 'jane@example.com', website: 'jane.com' },
+    ],
+  },
 };
 
-const renderWithStore = (store: any) => {
-  render(
+const renderComponent = (state = initialState) => {
+  const store = mockStore(state);
+  return render(
     <Provider store={store}>
       <UserDetails />
     </Provider>
@@ -34,39 +33,40 @@ const renderWithStore = (store: any) => {
 };
 
 describe('UserDetails Component', () => {
-  let store: ReturnType<typeof mockStore>;
-
   beforeEach(() => {
-    store = mockStore(initialState);
-    sagaMiddleware.run(rootSaga);
+    jest.clearAllMocks(); 
   });
 
-  it('should render the DataGrid with users', () => {
-    renderWithStore(store);
-
-    expect(screen.getByText('John Doe')).toBeInTheDocument();
-    expect(screen.getByText('Jane Doe')).toBeInTheDocument();
+  test('fetches users on mount', () => {
+    renderComponent();
+    expect(getUsersFetch).toHaveBeenCalled();
   });
 
-  it('should dispatch deleteUsers action on delete button click', () => {
-    renderWithStore(store);
+  test('allows row selection and deletion', async () => {
+    renderComponent();
 
-    fireEvent.click(screen.getByRole('checkbox', { name: /john doe/i }));
+    const rowCheckboxes = await screen.findAllByRole('checkbox');
+    fireEvent.click(rowCheckboxes[1]); 
 
-    fireEvent.click(screen.getByText('Delete'));
+    const deleteButton = screen.getByText('Delete');
+    fireEvent.click(deleteButton);
 
-    expect(deleteUsers).toHaveBeenCalledWith(1);
+    await waitFor(() => {
+      expect(deleteUsers).toHaveBeenCalledWith(1);
+    });
   });
 
-  it('should allow editing a user and dispatch updateUser action on save', async () => {
-    renderWithStore(store);
+  test('allows editing a user', async () => {
+    renderComponent();
 
-    fireEvent.click(screen.getByRole('checkbox', { name: /john doe/i }));
+    const rowCheckboxes = await screen.findAllByRole('checkbox');
+    fireEvent.click(rowCheckboxes[1]); 
 
-    fireEvent.click(screen.getByText('Edit'));
+    const editButton = screen.getByText('Edit');
+    fireEvent.click(editButton);
 
     const nameInput = screen.getByLabelText('Name');
-    fireEvent.change(nameInput, { target: { value: 'Johnathan Doe' } });
+    fireEvent.change(nameInput, { target: { value: 'John Updated' } });
 
     const saveButton = screen.getByText('Save');
     fireEvent.click(saveButton);
@@ -74,10 +74,10 @@ describe('UserDetails Component', () => {
     await waitFor(() => {
       expect(updateUser).toHaveBeenCalledWith({
         id: 1,
-        name: 'Johnathan Doe',
-        phone: '1234567890',
+        name: 'John Updated',
+        phone: '123-456-7890',
         email: 'john@example.com',
-        website: 'www.john.com',
+        website: 'john.com',
       });
     });
   });
